@@ -26,7 +26,23 @@ origin: 2026-10-07 由 xhs-corpus 方法论移植并实测验证于 X（推特�
 - 首选 ZCode 内置浏览器 IAB：node_repl bootstrap 后 `agent.browsers.get("iab")`，登录态落盘持久。
 - IAB 的 evaluate 是**宽松通道**（无副作用限制），`querySelectorAll` / `JSON.stringify` / `match` 可自由用。
 - 登录失效 → 打开 x.com 登录页，停手等用户登录，之后才能继续。**搜索需登录态**（未登录访问 /search 会跳登录页）。
-- 不用 Kv Browser Bridge（那是用户真实 Chrome，仅用户明确要求时用）。
+- 备用通道：Kv Browser Bridge（用户真实 Chrome）——仅在 IAB 不可用时用，见 §1.1。
+
+### 1.1 备用通道：Kv Browser Bridge 的严格通道差异（2026-10-14 实测）
+
+IAB 的 node_repl 工具若从会话消失，可改走 bridge。**bridge 的 `browser_evaluate` 是严格通道（throwOnSideEffect）**，与 IAB 的宽松通道行为不同，必须改姿势：
+
+| 被拦（EvalError: Possible side-effect） | 替代做法 |
+|---|---|
+| `document.documentElement.scrollTop += n`（滚动） | 用 `browser_scroll({tabId, deltaY})` 工具 |
+| `cloneNode()`（做正文兜底） | 正文只取 `[data-testid="tweetText"]`；长文卡另行处理 |
+| `document.title = ...` 等任何 DOM 写 | 只做读操作，写操作走 bridge 专用工具 |
+
+放行的：`querySelectorAll`、`innerText`、`getAttribute`、`match`、`JSON.stringify`、`location.href`。
+
+**另一处与 IAB 不同**：`browser_navigate` 返回 ≠ 页面加载完，且返回后旧 DOM 可能还在 → 必须先轮询等 URL 生效、再等卡片出现，最后才采集（否则采到上一页的残留卡片）。导航后页面偶发空白，刷新一次即可。
+
+驱动脚本见项目 `tools/bridge-batch.mjs`（通用批量调用）与 `tools/collect-x.mjs`（采集器）。
 
 ## 2. 搜索 URL 与页签（2026-10-07 实测）
 
